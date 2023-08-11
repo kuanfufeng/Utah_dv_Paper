@@ -33,7 +33,16 @@ def get_keys(modelcase):
         keys = ['a0', 'p1', 'a_{precip}', 'p2', 't_{shiftdays}',
                 'S1', 'log10tmin1', 'log10tmax1', 'S2', 'log10tmin2',
                 'log10tmax2', 'b_{lin}', 'logf'] # fix the order
-
+        
+    elif modelcase.lower() == "precip_temp":
+        # model with linear trend
+        keys = ['a0', 'p1', 'a_{precip}', 'p2', 't_{shiftdays}',
+                'b_{lin}', 'logf'] # precip +  temperature
+        
+    elif modelcase.lower() == "temp":
+        # model with linear trend
+        keys = ['a0',  'p2', 't_{shiftdays}',
+                'b_{lin}', 'logf'] # added for only temperature
     else:
         print(f"{modelcase} is not defined. Please check the modelcase.\n")
         exit(1)
@@ -225,6 +234,57 @@ def model_wlin(theta, all=False, **modelparam):
         return (model, p1 * GWL_trim, p2 * T_shift_trim, y_healing_SS, y_healing_PF, lintrend)
     else:
         return model
+    
+def model_temp(theta, all=False, **modelparam):
+    """
+    dv/v base model with linear trend term.
+    """
+
+    assert modelparam["ndim"] == len(theta)
+
+    a0,  p2, t_shiftdays, b_lin, log_f = theta
+
+    # get parameters from dictionary
+    unix_tvec          = modelparam["unix_tvec"]
+    fitting_period_ind = modelparam["fitting_period_ind"]
+
+    T_shift_trim = compute_tempshift(t_shiftdays, smooth_winlen = 6, **modelparam)
+
+    #-------------------------------------------------------------------#
+    lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
+
+    # Construct model
+    model = a0 + p2 * T_shift_trim + lintrend
+    #---------------------#
+
+    return model
+
+def model_precip_temp(theta, all=False, **modelparam):
+    """
+    dv/v base model with linear trend term.
+    """
+
+    assert modelparam["ndim"] == len(theta)
+
+    a0, p1, a_precip, p2, t_shiftdays, b_lin, log_f = theta
+
+    # get parameters from dictionary
+    unix_tvec          = modelparam["unix_tvec"]
+    fitting_period_ind = modelparam["fitting_period_ind"]
+
+    GWL_trim     = compute_GWLchange(a_precip, **modelparam)
+    T_shift_trim = compute_tempshift(t_shiftdays, smooth_winlen = 6, **modelparam)
+
+    #-------------------------------------------------------------------#
+    lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
+
+    # Construct model
+    model = a0 + p1 * GWL_trim + p2 * T_shift_trim + lintrend
+    #---------------------#
+
+    return model
+    
+
 
 #---Log probabilities---#
 
@@ -256,6 +316,10 @@ def log_likelihood(theta, **modelparam):
         model = model_base(theta, all=False, **modelparam)
     elif modelcase.lower() == "wlin":
         model = model_wlin(theta, all=False, **modelparam)
+    elif modelcase.lower() == "temp":
+        model = model_temp(theta, all=False, **modelparam)
+    elif modelcase.lower() == "precip_temp":
+        model = model_precip_temp(theta, all=False, **modelparam)
 
     # sigma2 = yerr_trim ** 2 + model ** 2 * np.exp(2 * log_f)
     sigma2 = err_data_trim ** 2 + np.exp(2 * log_f) # 2022.2.21 Applying constant over/under estimation in error
@@ -266,7 +330,7 @@ def log_likelihood(theta, **modelparam):
 def log_prior(theta, **modelparam):
     # print(theta)
     # print(modelparam)
-    keys      = modelparam["keys"]
+    keys = modelparam["keys"]
 
     S2 = theta[keys.index("S2")]
 
@@ -303,30 +367,30 @@ def log_probability(theta0, **modelparam):
     # print(type(modelparam))
     # 2023.04.07 Update: add 'fixparam01' flag to fix the aprecip, log10tmin1 and log10tmin2
     # print(modelparam.keys())
-    if modelparam["fixparam01"] == True:
-        # fix the aprecip, log10tmin1 and log10tmin2
-        if  modelparam["modelcase"]=="base":
-            theta = np.concatenate((theta0[0:2], [modelparam["a_{precip}_fixed"]], theta0[2:5], [modelparam["log10tmin1_fixed"]],
-                              theta0[5:7], [modelparam["log10tmin2_fixed"]], theta0[7:9]), axis=None)
-        elif modelparam["modelcase"]=="wlin":
-            theta = np.concatenate((theta0[0:2], [modelparam["a_{precip}_fixed"]], theta0[2:5], [modelparam["log10tmin1_fixed"]],
-                              theta0[5:7], [modelparam["log10tmin2_fixed"]], theta0[7:10]), axis=None)
-
-    else:
+    #if modelparam["fixparam01"] == True:        
+    #    # fix the aprecip, log10tmin1 and log10tmin2
+    #    if  modelparam["modelcase"]=="base":
+    #        theta = np.concatenate((theta0[0:2], [modelparam["a_{precip}_fixed"]], theta0[2:5], [modelparam["log10tmin1_fixed"]],
+    #                          theta0[5:7], [modelparam["log10tmin2_fixed"]], theta0[7:9]), axis=None)
+    #    elif modelparam["modelcase"]=="wlin":
+    #        theta = np.concatenate((theta0[0:2], [modelparam["a_{precip}_fixed"]], theta0[2:5], [modelparam["log10tmin1_fixed"]],
+    #                          theta0[5:7], [modelparam["log10tmin2_fixed"]], theta0[7:10]), axis=None)
+    #else:
         # do not fix the parameters
-        theta = theta0
+    theta = theta0
 
-    # print("theta0:")
-    # print(theta0)
+    #print("theta0:")
+    #print(theta0)
 
-    # print("theta:")
-    # print(theta)
+    #print("theta:")
+    #print(theta)
 
-    lp = log_prior(theta, **modelparam)
-    # print(lp)
-    if not np.isfinite(lp):
-        return -np.inf
-    return lp + log_likelihood(theta, **modelparam)
+    #lp = log_prior(theta, **modelparam)
+    ## print(lp)
+    #if not np.isfinite(lp):
+    #    return -np.inf
+    #return lp + log_likelihood(theta, **modelparam)
+    return log_likelihood(theta, **modelparam)
 
 
 
