@@ -68,7 +68,7 @@ if __name__ == '__main__':
     h5_id = 1
 
     # select the number of iteration during the MCMC inversion
-    nsteps = 15000 #15000#30000
+    nsteps = 6500 #15000#30000
 
     # set initial value and boundaries of the model parameters
     # format is: (initial value, [vmin, vmax])
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     modelparam["modelcase"] = "temp"
 
     # MCMC parameters
-    modelparam["nwalkers"] = 1024 # 32 # number of chains
+    modelparam["nwalkers"] =  32 # number of chains
 
     output_imgdir = "../figure/MCMC_modelfit"
     output_imgdir_debug = "../figure/MCMC_modelfit_dvvtrace"
@@ -262,27 +262,36 @@ if __name__ == '__main__':
         plt.gca().set_yticks([]);
         plt.show()
         
+        fig, axes = plt.subplots(modelparam["ndim"], figsize=(10, 7), sharex=True)
+        samples = sampler.get_chain()
+        labels = ["a0","p2","t_{shiftdays}", "b_{lin}", "log(f)"]
+        for i in range(ndim):
+            ax = axes[i]
+            ax.plot(samples[:, :, i], "k", alpha=0.3)
+            ax.set_xlim(0, len(samples))
+            ax.set_ylabel(labels[i])
+            ax.yaxis.set_label_coords(-0.1, 0.5)
+
+        axes[-1].set_xlabel("step number");
+        plt.show()
+        
+
+        flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
+        print(flat_samples.shape)
+        x=np.zeros(15)
+        y=np.zeros(15)
+        for i in range(1,16):
+            flat_samples = sampler.get_chain(discard=100, flat=True, thin=i)
+            x[i-1]=i
+            y[i-1]=len(flat_samples)
+    
         import corner
+        flat_samples = sampler.get_chain(discard=100, thin=1, flat=True)
+        print(flat_samples.shape)
+        fig = corner.corner( flat_samples, labels=labels)
+        plt.show()
 
         tau = sampler.get_autocorr_time()
-        burnin = int(2 * np.max(tau))
-        thin = int(0.5 * np.min(tau))
+        print(tau)
+               
         
-        log_prob_samples = sampler.get_log_prob(discard=burnin, flat=True, thin=thin)
-        log_prior_samples = sampler.get_blobs(discard=burnin, flat=True, thin=thin)
-        
-
-        print("burn-in: {0}".format(burnin))
-        print("thin: {0}".format(thin))
-        print("flat chain shape: {0}".format(samples.shape))
-        print("flat log prob shape: {0}".format(log_prob_samples.shape))
-        print("flat log prior shape: {0}".format(log_prior_samples.shape))
-
-        
-        all_samples = np.concatenate(
-            (samples, log_prob_samples[:, None], log_prior_samples[:, None]), axis=1)
-
-        labels = list(map(r"$\theta_{{{0}}}$".format, range(1, ndim + 1)))
-        labels += ["log prob", "log prior"]
-
-        corner.corner(all_samples, labels=labels);
