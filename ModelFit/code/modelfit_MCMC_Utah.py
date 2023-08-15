@@ -47,13 +47,6 @@ print("{0} CPUs".format(ncpu))
 
 if __name__ == '__main__':
 
-    #---set the file path of your case study list---#
-#    root = "../processed_data/"
-#    h5_stats_list = [
-#                    root+"02dvvanderr_formodelfit_chanweighted_dvvtraces_chanweighted_monitoring_stats_uwbackup_2010-2022_stretching.csv_0.9-1.2.h5",
-#                    root+"02dvvanderr_formodelfit_chanweighted_dvvtraces_chanweighted_monitoring_stats_uwbackup_2010-2022_mwcs.csv_0.9-1.2.h5"]
-
-
     # fitting start and end time
     starttime = datetime.datetime(2006, 1, 1)
     endtime = datetime.datetime(2023, 3, 31)
@@ -77,8 +70,8 @@ if __name__ == '__main__':
                 "a0"            : (0.0, [-1.0, 1.0]), # offset
                 #"p1"            : (0.01, [-np.inf, np.inf]), # scale of GWL
                 #"a_{precip}"      : (1e-2, [0, 1.0]), # delay in GWL [1/day]
-                "p2"            : (0.01, [-np.inf, np.inf]), # scale of Temp
-                "t_{shiftdays}"   : (7, [0, 180]), # shift of temp in days
+                "p2"            : (0.01, [0, np.inf]), # scale of Temp
+                "t_{shiftdays}"   : (7, [0, 90]), # shift of temp in days
                 "b_{lin}"         : (0.0, [-np.inf, np.inf]), # slope of linear trend
                 "logf"         : (0.0, [-10, 10]), # magnitude of uncertainity
                 }
@@ -88,7 +81,7 @@ if __name__ == '__main__':
     modelparam["modelcase"] = "temp"
 
     # MCMC parameters
-    modelparam["nwalkers"] =  32 # number of chains
+    modelparam["nwalkers"] =  1024 # number of chains
 
     output_imgdir = "../figure/MCMC_modelfit"
     output_imgdir_debug = "../figure/MCMC_modelfit_dvvtrace"
@@ -98,19 +91,13 @@ if __name__ == '__main__':
     np.random.seed(seed=20201108)
     #-------------------------------------------#
 
-    #if not os.path.exists(output_imgdir):
-    #    os.makedirs(output_imgdir)
-
     if not os.path.exists(output_imgdir_debug):
         os.makedirs(output_imgdir_debug)
 
     if not os.path.exists(output_datadir):
         os.makedirs(output_datadir)
 
-    #---Read keys from filename---#
-    #casename = os.path.basename(h5_stats_list[h5_id].split('.h5')[0])
-    #freqband = h5_stats_list[h5_id].split('.h5')[0].split('_')[-1]
-    #dvvmethod = casename.split('.csv')[0].split('_')[-1]    
+    #---Read keys from filename---# 
     casename = "UU_test"
     freqband = "2-4"
     dvvmethod = "stretching"
@@ -119,9 +106,7 @@ if __name__ == '__main__':
     #fi = h5py.File(h5_stats_list[h5_id], "r")
     usecols=["uniform_tvec", "dvv", "dv_err", "temp_prism", "ppt_prism", "soil_nldas", "snow_nldas", "date"]
     root = "../../UU_csv_blank/"
-    #stan = np.loadtxt(root+"slst",dtype='str')
-    #nst = len(stan)
-    fn = root+"UU_BGU.csv"
+    fn = root+"UU_MPU.csv"
     fi = pd.read_csv(fn,names=usecols,header=0)
     fi['date'] = fi['date'].astype(str)
 
@@ -129,28 +114,19 @@ if __name__ == '__main__':
     tolen=len(fi['date'][:])
     btimestamp=time.mktime(time.strptime(str(fi['date'][0]), "%Y-%m-%d"))
     
-    uniform_tvec_unix = np.array( [(btimestamp+ 86400*x) for x in range(0,tolen)]) 
     #uniform_tvec_unix = np.array(fi['uniform_tvec'])
-    #uniform_tvec_unix = np.array( [time.mktime(time.strptime(str(fi['date'][x]), "%Y-%m-%d")) for x in fi['date'][:] ])
+    uniform_tvec_unix = np.array( [(btimestamp+ 86400*x) for x in range(0,tolen)]) 
     uniform_tvec = np.array([datetime.datetime.utcfromtimestamp(x) for x in uniform_tvec_unix])
     unix_tvec = np.array([x.timestamp() for x in uniform_tvec])
 
     modelparam["averagestack_step"] = averagestack_step
     modelparam["uniform_tvec"] = uniform_tvec
     modelparam["unix_tvec"] = unix_tvec
+    
     #---Trim the time series from the starttime to the endtime---#
     fitting_period_ind = np.where((uniform_tvec >= starttime) & (uniform_tvec <= endtime))[0]
     modelparam["fitting_period_ind"] = fitting_period_ind
     print('fitting_period_ind ',fitting_period_ind)
-
-    #---Compute time at San Simeon and Parkfield EQ for healing model---#
-    #tSS = datetime.datetime(2003, 12, 22) # time for San Simeon
-    #tPF = datetime.datetime(2004, 9, 28) # time for Park field
-    #unix_tSS = (tSS - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s') # origin of time
-    #unix_tPF = (tPF - pd.Timestamp("1970-01-01")) // pd.Timedelta('1s') # origin of time
-
-    #modelparam["unix_tSS"]   = unix_tSS
-    #modelparam["unix_tPF"]   = unix_tPF
 
     #---Read temperature and precipitation data at Parkfield---#
     #df_tandp= pd.read_csv("../data/interped_tempandprecip_longterm.csv", header=0, sep = ',')
@@ -192,7 +168,7 @@ if __name__ == '__main__':
 
     #---Extract station pairs used for model fitting---#
     #stationpairs = list(fi['dvv'].keys())
-    stationpairs = ['BGU-BGU']
+    stationpairs = ['MPU-MPU']
     print(stationpairs)
 
     #------------------------------------------------------#
@@ -260,7 +236,7 @@ if __name__ == '__main__':
         plt.xlabel(r"$\theta_1$")
         plt.ylabel(r"$p(\theta_1)$")
         plt.gca().set_yticks([]);
-        plt.show()
+        plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s_histo.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=150)
         
         fig, axes = plt.subplots(modelparam["ndim"], figsize=(10, 7), sharex=True)
         samples = sampler.get_chain()
@@ -273,7 +249,7 @@ if __name__ == '__main__':
             ax.yaxis.set_label_coords(-0.1, 0.5)
 
         axes[-1].set_xlabel("step number");
-        plt.show()
+        plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s_sampler.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=150)
         
 
         flat_samples = sampler.get_chain(discard=100, thin=15, flat=True)
@@ -289,7 +265,7 @@ if __name__ == '__main__':
         flat_samples = sampler.get_chain(discard=100, thin=1, flat=True)
         print(flat_samples.shape)
         fig = corner.corner( flat_samples, labels=labels)
-        plt.show()
+        plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s_corner.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=150)
 
         tau = sampler.get_autocorr_time()
         print(tau)
