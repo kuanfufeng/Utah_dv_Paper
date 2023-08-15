@@ -66,10 +66,10 @@ if __name__ == '__main__':
     # set initial value and boundaries of the model parameters
     # format is: (initial value, [vmin, vmax])
     # offset, scale of GWL, delay in GWL, scale of Temp, shift of temp in days, scale in coseimic change, healing duration for SS and PF and linear trend.
-    modelparam = {
-                "a0"            : (0.0, [-1.0, 1.0]), # offset
                 #"p1"            : (0.01, [-np.inf, np.inf]), # scale of GWL
                 #"a_{precip}"      : (1e-2, [0, 1.0]), # delay in GWL [1/day]
+    modelparam = {
+                "a0"            : (0.0, [-1.0, 1.0]), # offset
                 "p2"            : (0.01, [0, np.inf]), # scale of Temp
                 "t_{shiftdays}"   : (7, [0, 90]), # shift of temp in days
                 "b_{lin}"         : (0.0, [-np.inf, np.inf]), # slope of linear trend
