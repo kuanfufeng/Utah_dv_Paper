@@ -34,15 +34,13 @@ def get_keys(modelcase):
                 'S1', 'log10tmin1', 'log10tmax1', 'S2', 'log10tmin2',
                 'log10tmax2', 'b_{lin}', 'logf'] # fix the order
         
-    elif modelcase.lower() == "precip_temp":
-        # model with linear trend
-        keys = ['a0', 'p1', 'a_{precip}', 'p2', 't_{shiftdays}',
-                'b_{lin}', 'logf'] # precip +  temperature
+    elif modelcase.lower() == "soil_temp":
+        # model 
+        keys = ['a0', 'p3', 'p2', 't_{shiftdays}', 'logf'] # soil +  temperature
         
     elif modelcase.lower() == "temp":
         # model with linear trend
-        keys = ['a0',  'p2', 't_{shiftdays}',
-                'b_{lin}', 'logf'] # added for only temperature
+        keys = ['a0',  'p2', 't_{shiftdays}', 'b_{lin}', 'logf'] # added for only temperature
     else:
         print(f"{modelcase} is not defined. Please check the modelcase.\n")
         exit(1)
@@ -90,6 +88,17 @@ def compute_GWLchange(a_SSW06, **modelparam):
     GWL = GWL - np.mean(GWL)
     return GWL[fitting_period_ind]
 
+#1.1 ---Soil moisture to ground water level change--- #
+def compute_soil2GWL( **modelparam):
+    """
+    mimic the GWL change with soil moisture equivalent water thickness
+    """
+    #print(soilmois, modelparam["soil"])
+    fitting_period_ind = modelparam["fitting_period_ind"]
+    smd = modelparam["soil"]
+    GWL = np.array(smd)
+    GWL = GWL - np.mean(GWL)
+    return GWL[fitting_period_ind]
 
 #2. ---Temperature and thermoelastic change---#
 def compute_tempshift(shift_days, smooth_winlen = 6, **modelparam):
@@ -237,7 +246,7 @@ def model_wlin(theta, all=False, **modelparam):
     
 def model_temp(theta, all=False, **modelparam):
     """
-    dv/v base model with linear trend term.
+    dv/v temp model with linear trend term.
     """
 
     assert modelparam["ndim"] == len(theta)
@@ -259,27 +268,27 @@ def model_temp(theta, all=False, **modelparam):
 
     return model
 
-def model_precip_temp(theta, all=False, **modelparam):
+def model_soil_temp(theta, all=False, **modelparam):
     """
-    dv/v base model with linear trend term.
+    dv/v soil and temp model without linear trend term.
     """
 
     assert modelparam["ndim"] == len(theta)
 
-    a0, p1, a_precip, p2, t_shiftdays, b_lin, log_f = theta
-
+    a0, p3, p2, t_shiftdays,log_f = theta
+    
     # get parameters from dictionary
     unix_tvec          = modelparam["unix_tvec"]
     fitting_period_ind = modelparam["fitting_period_ind"]
-
-    GWL_trim     = compute_GWLchange(a_precip, **modelparam)
+    
+    GWL_trim     = compute_soil2GWL( **modelparam)
     T_shift_trim = compute_tempshift(t_shiftdays, smooth_winlen = 6, **modelparam)
 
     #-------------------------------------------------------------------#
-    lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
+    #lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
 
     # Construct model
-    model = a0 + p1 * GWL_trim + p2 * T_shift_trim + lintrend
+    model = a0 + p3 * GWL_trim + p2 * T_shift_trim 
     #---------------------#
 
     return model
@@ -318,8 +327,8 @@ def log_likelihood(theta, **modelparam):
         model = model_wlin(theta, all=False, **modelparam)
     elif modelcase.lower() == "temp":
         model = model_temp(theta, all=False, **modelparam)
-    elif modelcase.lower() == "precip_temp":
-        model = model_precip_temp(theta, all=False, **modelparam)
+    elif modelcase.lower() == "soil_temp":
+        model = model_soil_temp(theta, all=False, **modelparam)
 
     # sigma2 = yerr_trim ** 2 + model ** 2 * np.exp(2 * log_f)
     sigma2 = err_data_trim ** 2 + np.exp(2 * log_f) # 2022.2.21 Applying constant over/under estimation in error
@@ -332,33 +341,15 @@ def log_prior(theta, **modelparam):
     # print(modelparam)
     keys = modelparam["keys"]
 
-    S2 = theta[keys.index("S2")]
-
     #2. evaluate the boundaries
     for i, key in enumerate(keys):
-        # print(key, val)
         vmin, vmax = modelparam[key][1]
         val = theta[i]
+        #print(key, val)
 
-        # constraint on the coseismic drop in dv/v
-        if key == "S1": # special case for the boundary
-            # apply a condition such that vmax(S1) * S2 >= S1
-            # we used vmax(S1) = 0.5; in this case the S1 is less than 50% of S2
-            if (val < vmin) or (vmax * S2 < val):
-                return -np.inf
-        else:
-            if (val < vmin) or (vmax < val):
-                return -np.inf
-
-    # constraint on the tmin and tmax
-    log10tmin1 = theta[keys.index("log10tmin1")]
-    log10tmax1 = theta[keys.index("log10tmax1")]
-    log10tmin2 = theta[keys.index("log10tmin2")]
-    log10tmax2 = theta[keys.index("log10tmax2")]
-
-    if (log10tmin1>log10tmax1) or (log10tmin2>log10tmax2): # a condition such that tmin < tmax
-        return -np.inf
-
+        if (val < vmin) or (vmax < val):
+            return -np.inf
+        
     # if all the trial parameters are within the boundaries, return 0.
     return 0
 
@@ -385,14 +376,11 @@ def log_probability(theta0, **modelparam):
     #print("theta:")
     #print(theta)
 
-    #lp = log_prior(theta, **modelparam)
-    ## print(lp)
-    #if not np.isfinite(lp):
-    #    return -np.inf
-    #return lp + log_likelihood(theta, **modelparam)
-    return log_likelihood(theta, **modelparam)
-
-
+    lp = log_prior(theta, **modelparam)
+    # print(lp)
+    if not np.isfinite(lp):
+        return -np.inf
+    return lp + log_likelihood(theta, **modelparam)
 
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'same') / w
@@ -406,7 +394,5 @@ def compute_BIC(y_obs, y_syn, k):
     assert len(y_obs) == len(y_syn)
     N = len(y_obs)
     return N*np.log((1/N)*np.nansum((y_obs - y_syn)**2)) + k*np.log(N)
-
-
 
 
