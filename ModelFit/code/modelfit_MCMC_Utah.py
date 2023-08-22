@@ -61,9 +61,6 @@ def sample_walkers(nsamples,flattened_chain):
 if __name__ == '__main__':
     
     stnm=sys.argv[1]
-
-    burnin=500
-    thin=15
     
     # fitting start and end time
     starttime = datetime.datetime(2006, 1, 1)
@@ -77,17 +74,20 @@ if __name__ == '__main__':
     
 
     # select the number of iteration during the MCMC inversion
-    nsteps = 5000 #30000
-
+    nsteps = 12000 #30000
+    burnin=200
+    thin=20
+    
     # set initial value and boundaries of the model parameters
     # format is: (initial value, [vmin, vmax])
     # offset, scale of GWL, delay in GWL, scale of Temp, shift of temp in days, scale in coseimic change, healing duration for SS and PF and linear trend.
-                #"b_{lin}"         : (0.0, [-np.inf, np.inf]), # slope of linear trend
+                
     modelparam = {
                 "a0"            : (0.0, [-1.0, 1.0]), # offset
-                "p3"            : (1e-6, [-np.inf, np.inf]), # scale of GWL mimic by soil moisture equivalent water thickness
+                "p3"            : (-1.0, [-np.inf, np.inf]), # scale of GWL mimic by soil moisture equivalent water thickness
                 "p2"            : (0.01, [0, np.inf]), # scale of Temp
-                "t_{shiftdays}"   : (7, [0, 120]), # shift of temp in days
+                "t_{shiftdays}"   : (1, [0, 120]), # shift of temp in days
+                "b_{lin}"         : (0.0, [-np.inf, np.inf]), # slope of linear trend
                 "logf"         : (0.0, [-10, 10]), # magnitude of uncertainity
                 }
 
@@ -95,14 +95,15 @@ if __name__ == '__main__':
     modelparam["modelcase"] = "soil_temp" # "temp" "base" or "wlin"
 
     # MCMC parameters
-    modelparam["nwalkers"] = 32 # number of chains
+    modelparam["nwalkers"] =  32 # number of chains
 
-    output_imgdir = "../figure/MCMC_modelfit"
+    #output_imgdir = "../figure/MCMC_modelfit"
+    output_imgdir = "../figure/MCMC_test"
     output_imgdir_debug = "../figure/MCMC_modelfit_dvvtrace"
     output_datadir = "../processed_data/MCMC_sampler_{}".format(nsteps)
 
     # set random seed to fix the initial chains
-    np.random.seed(seed=20201108)
+    np.random.seed(seed=20121115)
     #-------------------------------------------#
     if not os.path.exists(output_imgdir):
         os.makedirs(output_imgdir)
@@ -121,7 +122,7 @@ if __name__ == '__main__':
     #---Read csv containing channel-weighted dvv and err---#
     #fi = h5py.File(h5_stats_list[h5_id], "r")
     usecols=["uniform_tvec", "dvv", "dv_err", "temp_prism", "ppt_prism", "soil_nldas", "snow_nldas", "date"]
-    root = "../../UU_csv_blank/"
+    root = "../../UU_csv_blank_remean/"
     fn = root+"UU_"+stnm+".csv"
     fi = pd.read_csv(fn,names=usecols,header=0)
     fi['date'] = fi['date'].astype(str)
@@ -151,7 +152,7 @@ if __name__ == '__main__':
     #modelparam["CAVG"]   = df_tandp_synchronized.CAVG
     
     modelparam["CAVG"]   = np.array(fi['temp_prism'])
-    modelparam["soil"]   = np.array(fi['soil_nldas'])*0.001
+    modelparam["soil"]   = np.array(fi['soil_nldas']) 
      
 
     #---Generate the initial model parameters with chains---#
@@ -186,7 +187,7 @@ if __name__ == '__main__':
 
         #---plot dv/v for the debug---#
         nax=int((ndim-3)/2)+1
-        fig, ax = plt.subplots(3, 1, figsize=(8,6))
+        fig, ax = plt.subplots(3, 1, figsize=(12,9))
         ax[0].errorbar(uniform_tvec, dvv_data, yerr = err_data, capsize=3, ls="-", c = "r", ecolor='black')
         ax[1].plot(uniform_tvec, modelparam["CAVG"],  ls="-", c = "orange")
         ax[0].set_title(stationpair)
@@ -194,7 +195,7 @@ if __name__ == '__main__':
         ax[2].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b")
         ax[2].set_title("Soil Moisture EWT (m) from NLDAS")
         plt.tight_layout()
-        plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=150)
+        plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=100)
         plt.grid(True)
         plt.close()
         plt.clf()
@@ -224,7 +225,7 @@ if __name__ == '__main__':
  
 
         
-        labels = ["a0","p3","p2","t_{shiftdays}", "b_{lin}", "log(f)"]
+        labels = ["a0","p3","p2","t_{shiftdays}","b_{lin}", "log(f)"]
 
         samples = sampler.flatchain
         theta_max  = samples[np.argmax(sampler.flatlnprobability)]
@@ -237,7 +238,7 @@ if __name__ == '__main__':
         flat_samples = sampler.get_chain(discard=burnin, thin=thin, flat=True)
         print(flat_samples.shape)
         fig = corner.corner( flat_samples, show_titles=True, labels=labels, plot_datapoints=True, quantiles=[0.16, 0.5, 0.84], truths=theta_max,title_kwargs={"fontsize": 10})
-        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_corner.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=150)
+        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_corner.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=100)
         plt.close()
         plt.clf()
         
@@ -245,7 +246,7 @@ if __name__ == '__main__':
         med_model, spread = sample_walkers(nsteps,samples)
         best_fit_model = model_soil_temp(theta_max, all=False, **modelparam)
 
-        fig, ax = plt.subplots(3, 1, figsize=(16,12))
+        fig, ax = plt.subplots(3, 1, figsize=(12,9))
         for theta in samples[np.random.randint(len(samples),size=(nsteps-burnin))]:
             ax[0].plot(uniform_tvec, model_soil_temp(theta, all=False, **modelparam), color="r", alpha=0.1)
         ax[0].plot(uniform_tvec,best_fit_model, c='b', label='Highest Likelihood Model')
@@ -262,7 +263,7 @@ if __name__ == '__main__':
         ax[1].legend()
         ax[2].legend()
 
-        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_samplers.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=150)
+        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_samplers.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=100)
         plt.close()
         plt.clf()        
 

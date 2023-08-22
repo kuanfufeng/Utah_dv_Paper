@@ -36,7 +36,11 @@ def get_keys(modelcase):
         
     elif modelcase.lower() == "soil_temp":
         # model 
-        keys = ['a0', 'p3', 'p2', 't_{shiftdays}', 'logf'] # soil +  temperature
+        keys = ['a0', 'p3', 'p2', 't_{shiftdays}', 'b_{lin}', 'logf'] # soil +  temperature
+        
+    elif modelcase.lower() == "soil":
+        # model 
+        keys = ['a0', 'p3', 'logf'] # soil 
         
     elif modelcase.lower() == "temp":
         # model with linear trend
@@ -86,6 +90,7 @@ def compute_GWLchange(a_SSW06, **modelparam):
     phi = 0.05   # porosity is fixed
     GWL = SSW06(np.array(modelparam["precip"])/1e3, phi, a_SSW06, modelparam["averagestack_step"])
     GWL = GWL - np.mean(GWL)
+    
     return GWL[fitting_period_ind]
 
 #1.1 ---Soil moisture to ground water level change--- #
@@ -95,9 +100,9 @@ def compute_soil2GWL( **modelparam):
     """
     #print(soilmois, modelparam["soil"])
     fitting_period_ind = modelparam["fitting_period_ind"]
-    smd = modelparam["soil"]
-    GWL = np.array(smd)
-    GWL = GWL - np.mean(GWL)
+    GWL = np.array(modelparam["soil"])
+    #GWL = GWL - GWL[0]
+    
     return GWL[fitting_period_ind]
 
 #2. ---Temperature and thermoelastic change---#
@@ -275,7 +280,7 @@ def model_soil_temp(theta, all=False, **modelparam):
 
     assert modelparam["ndim"] == len(theta)
 
-    a0, p3, p2, t_shiftdays,log_f = theta
+    a0, p3, p2, t_shiftdays, b_lin, log_f = theta
     
     # get parameters from dictionary
     unix_tvec          = modelparam["unix_tvec"]
@@ -285,12 +290,32 @@ def model_soil_temp(theta, all=False, **modelparam):
     T_shift_trim = compute_tempshift(t_shiftdays, smooth_winlen = 6, **modelparam)
 
     #-------------------------------------------------------------------#
-    #lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
+    lintrend = compute_lineartrend(unix_tvec[fitting_period_ind], b_lin)
 
     # Construct model
-    model = a0 + p3 * GWL_trim + p2 * T_shift_trim 
+    model = a0 + p3 * GWL_trim + p2 * T_shift_trim + lintrend
     #---------------------#
 
+    return model
+    
+def model_soil(theta, all=False, **modelparam):
+    """
+    dv/v soil model without linear trend term.
+    """
+
+    assert modelparam["ndim"] == len(theta)
+
+    a0, p3, log_f = theta
+    
+    # get parameters from dictionary
+    unix_tvec          = modelparam["unix_tvec"]
+    fitting_period_ind = modelparam["fitting_period_ind"]
+    GWL_trim     = compute_soil2GWL( **modelparam)
+        
+    # Construct model
+    model = a0 + p3 * GWL_trim 
+    #---------------------#
+    
     return model
     
 
@@ -329,6 +354,8 @@ def log_likelihood(theta, **modelparam):
         model = model_temp(theta, all=False, **modelparam)
     elif modelcase.lower() == "soil_temp":
         model = model_soil_temp(theta, all=False, **modelparam)
+    elif modelcase.lower() == "soil":
+        model = model_soil(theta, all=False, **modelparam)
 
     # sigma2 = yerr_trim ** 2 + model ** 2 * np.exp(2 * log_f)
     sigma2 = err_data_trim ** 2 + np.exp(2 * log_f) # 2022.2.21 Applying constant over/under estimation in error
