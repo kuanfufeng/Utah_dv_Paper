@@ -75,8 +75,8 @@ if __name__ == '__main__':
 
     # select the number of iteration during the MCMC inversion
     nsteps = 12000 #30000
-    burnin=200
-    thin=20
+    burnin=1200
+    thin=120
     
     # set initial value and boundaries of the model parameters
     # format is: (initial value, [vmin, vmax])
@@ -95,10 +95,10 @@ if __name__ == '__main__':
     modelparam["modelcase"] = "soil_temp" # "temp" "base" or "wlin"
 
     # MCMC parameters
-    modelparam["nwalkers"] =  32 # number of chains
+    modelparam["nwalkers"] =  200 # number of chains
 
     #output_imgdir = "../figure/MCMC_modelfit"
-    output_imgdir = "../figure/MCMC_test"
+    output_imgdir = "../figure/MCMC_soil_temp"
     output_imgdir_debug = "../figure/MCMC_modelfit_dvvtrace"
     output_datadir = "../processed_data/MCMC_sampler_{}".format(nsteps)
 
@@ -245,28 +245,37 @@ if __name__ == '__main__':
 
         med_model, spread = sample_walkers(nsteps,samples)
         best_fit_model = model_soil_temp(theta_max, all=False, **modelparam)
+        
+        title=[" %.2f " % k for k in theta_max]
+        print("Title, ",title)
 
-        fig, ax = plt.subplots(3, 1, figsize=(12,9))
-        for theta in samples[np.random.randint(len(samples),size=(nsteps-burnin))]:
+        fig, ax = plt.subplots(5, 1, figsize=(12,10))
+        for theta in samples[np.random.randint(len(samples),size=9000)]:
             ax[0].plot(uniform_tvec, model_soil_temp(theta, all=False, **modelparam), color="r", alpha=0.1)
-        ax[0].plot(uniform_tvec,best_fit_model, c='b', label='Highest Likelihood Model')
+        ax[0].plot(uniform_tvec,best_fit_model, c='b',linewidth=0.8, label='Highest Likelihood Model')
         ax[0].plot(uniform_tvec, dvv_data, label='Observed dvv', c='k')
-        ax[0].set_title(stationpair+" and theta_max: "+str(theta_max))
-        ax[1].fill_between(uniform_tvec,med_model-spread,med_model+spread,color='gold',alpha=0.5,label=r'$1\sigma$ Posterior Spread')
-        ax[1].plot(uniform_tvec, med_model, c='orange',label='Highest Likelihood Model')
+        ax[0].set_title(stationpair+" --> theta_max: "+str(title))
         ax[1].plot(uniform_tvec, dvv_data, label='observed dvv',c='k')
-        ax[1].plot(uniform_tvec, best_fit_model, c='b', label='Highest Likelihood Model')
+        ax[1].fill_between(uniform_tvec,med_model-spread*2,med_model+spread*2,color='pink',alpha=0.3,label=r'$2\sigma$ Posterior Spread')
+        ax[1].fill_between(uniform_tvec,med_model-spread,med_model+spread,color='gold',alpha=0.5,label=r'$1\sigma$ Posterior Spread')
+        ax[1].plot(uniform_tvec, med_model, c='orange',linewidth=2, label='Median Model')
+        ax[1].plot(uniform_tvec, best_fit_model, c='b',linestyle='--',linewidth=0.8, label='Highest Likelihood Model')
+
         ax[2].plot(uniform_tvec, dvv_data, label='observed dvv',c='k')
-        ax[2].plot(uniform_tvec, best_fit_model, c='b', label='Highest Likelihood Model')
+        ax[2].plot(uniform_tvec, med_model, c='orange',linewidth=2, label='Median Model')
+        ax[2].plot(uniform_tvec, best_fit_model, c='b',linestyle='--', label='Highest Likelihood Model')
         ax[2].plot(uniform_tvec, dvv_data-best_fit_model, label='Residual',c='r')
+        ax[3].plot(uniform_tvec, modelparam["CAVG"],  ls="-", c = "orange",label="Temperature (C) from PRISM")
+        ax[4].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b" ,label="Re-mean Soil Moisture EWT (m) from NLDAS")
         ax[0].legend()
         ax[1].legend()
         ax[2].legend()
-
-        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_samplers.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=100)
+        ax[3].legend()
+        ax[4].legend()
+        plt.tight_layout()
+        plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_samplers.png"%(stnm, freqband), format="png", dpi=100)
         plt.close()
-        plt.clf()        
-
+        plt.clf()  
                 
         fig, axes = plt.subplots( modelparam["ndim"], figsize=(10, 7), sharex=True)
         samples = sampler.get_chain(discard=burnin, thin=thin)
@@ -278,7 +287,8 @@ if __name__ == '__main__':
             ax.set_xlim(0, len(samples))
             ax.set_ylabel(labels[i])
             ax.yaxis.set_label_coords(-0.1, 0.5)
-        axes[-1].set_xlabel("step number");
+        axes[-1].set_xlabel("step number")
+        axes[0].set_title(stationpair+" --> theta_max: "+str(title))
         plt.savefig(output_imgdir+"/MCMCdvv_%s_%s_%s_steps.png"%(stnm, freqband, modelparam["modelcase"]), format="png", dpi=100)
         plt.close()
         plt.clf()
