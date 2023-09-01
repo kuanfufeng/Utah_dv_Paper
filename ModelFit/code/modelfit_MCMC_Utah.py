@@ -95,12 +95,12 @@ if __name__ == '__main__':
     modelparam["modelcase"] = "soil_temp" # "temp" "base" or "wlin"
 
     # MCMC parameters
-    modelparam["nwalkers"] =  200 # number of chains
+    modelparam["nwalkers"] =  32 # 200 # number of chains
 
-    #output_imgdir = "../figure/MCMC_modelfit"
-    output_imgdir = "../figure/MCMC_soil_temp"
+    #output_imgdir = "../figure/MCMC_test"
+    output_imgdir = "../figure/MCMC_soil_temp_normlized"
     output_imgdir_debug = "../figure/MCMC_modelfit_dvvtrace"
-    output_datadir = "../processed_data/MCMC_sampler_{}".format(nsteps)
+    output_datadir = "../processed_data/MCMC_sampler_{}_Normalized".format(nsteps)
 
     # set random seed to fix the initial chains
     np.random.seed(seed=20121115)
@@ -151,8 +151,8 @@ if __name__ == '__main__':
     #modelparam["precip"] = df_tandp_synchronized.precip
     #modelparam["CAVG"]   = df_tandp_synchronized.CAVG
     
-    modelparam["CAVG"]   = np.array(fi['temp_prism'])
-    modelparam["soil"]   = np.array(fi['soil_nldas']) 
+    modelparam["CAVG"]   = np.array(fi['temp_prism'])/np.max(np.abs(fi['temp_prism']))
+    modelparam["soil"]   = np.array(fi['soil_nldas'])/np.max(np.abs(fi['soil_nldas']))
      
 
     #---Generate the initial model parameters with chains---#
@@ -189,10 +189,10 @@ if __name__ == '__main__':
         nax=int((ndim-3)/2)+1
         fig, ax = plt.subplots(3, 1, figsize=(12,9))
         ax[0].errorbar(uniform_tvec, dvv_data, yerr = err_data, capsize=3, ls="-", c = "r", ecolor='black')
-        ax[1].plot(uniform_tvec, modelparam["CAVG"],  ls="-", c = "orange")
+        ax[1].plot(uniform_tvec, np.array(fi['temp_prism']),  ls="-", c = "orange")
         ax[0].set_title(stationpair)
         ax[1].set_title("Temperature (C) from PRISM")
-        ax[2].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b")
+        ax[2].plot(uniform_tvec,np.array(fi['soil_nldas']),  ls="-", c = "b")
         ax[2].set_title("Soil Moisture EWT (m) from NLDAS")
         plt.tight_layout()
         plt.savefig(output_imgdir_debug+"/MCMCdvv_%s_%s_%s.png"%(stationpair, freqband, modelparam["modelcase"]), format="png", dpi=100)
@@ -262,11 +262,13 @@ if __name__ == '__main__':
         ax[1].plot(uniform_tvec, best_fit_model, c='b',linestyle='--',linewidth=0.8, label='Highest Likelihood Model')
 
         ax[2].plot(uniform_tvec, dvv_data, label='observed dvv',c='k')
-        ax[2].plot(uniform_tvec, med_model, c='orange',linewidth=2, label='Median Model')
         ax[2].plot(uniform_tvec, best_fit_model, c='b',linestyle='--', label='Highest Likelihood Model')
         ax[2].plot(uniform_tvec, dvv_data-best_fit_model, label='Residual',c='r')
-        ax[3].plot(uniform_tvec, modelparam["CAVG"],  ls="-", c = "orange",label="Temperature (C) from PRISM")
-        ax[4].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b" ,label="Re-mean Soil Moisture EWT (m) from NLDAS")
+        ax[3].plot(uniform_tvec, modelparam["CAVG"],  ls="-", c="orange",label="Normalized de-mean Temperature from PRISM")
+        ax[3].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b" ,label="Normalized de-mean Soil Moisture EWT from NLDAS")
+        ax[4].plot(uniform_tvec,modelparam["soil"],  ls="-", c = "b" ,label="Normalized de-mean Soil Moisture EWT from NLDAS")
+        ax[4].plot(uniform_tvec, dvv_data*-1, label='observed dvv',c='k')
+        ax[3].plot(uniform_tvec, dvv_data,label='observed dvv',c='k')
         ax[0].legend()
         ax[1].legend()
         ax[2].legend()
